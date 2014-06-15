@@ -1,0 +1,244 @@
+
+# Read raw data.
+A <- read.csv('activity.csv', as.is=T)
+head(A)
+tail(A)
+fieldnames <- names(A)
+print("field names...", quote=F)
+print(fieldnames)
+
+# Seconds per day, days, expected number of samples, sample count check.
+spd <- 24 * 60 / 5
+days = 31 + 30
+sbSamples <- spd * days
+ns <- nrow(A)
+print(sprintf("got (%d) == expected (%d) samples: %s", ns, sbSamples, ns == sbSamples), quote=F)
+
+# Sorted?
+z <- A[order(A$date, A$interval), ]
+print("data are sorted by date, interval...", quote=F)
+ns == sum(z$date == A$date)
+ns == sum(z$interval == A$interval)
+rm(z)
+
+# Field types.
+class(A$steps)
+class(A$date)
+class(A$interval)
+
+# NA, Zero, NonZero counts (by interval).
+nAna <- sum(is.na(A$steps))
+nAz <- sum(A$steps == 0, na.rm=T)
+nAnz <- sum(A$steps != 0, na.rm=T)
+print(sprintf("A$steps NA: %d, zero: %d, nonzero: %d", nAna, nAz, nAnz), quote=F)
+
+# Save the raw steps value in another field.
+A$rawSteps <- A$steps
+
+# Add a field indicating that steps is NA.
+A$naSteps <- is.na(A$steps)
+
+# Add an empty field for imputed steps.
+A$impSteps <- NA
+
+# Add a day-of-week field.
+A$DOW <- weekdays(strptime(A$date, format='%Y-%m-%d'), abbreviate=T)
+A$facDOW <- factor(A$DOW, levels=c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), ordered=T)
+
+# Add a weekday/weekend factor.
+A$wdwe <- factor(A$facDOW >= "Sat" & A$facDOW <= "Sun", labels=c("weekday", "weekend"))
+sum(A$wdwe == "weekday")
+sum(A$wdwe == "weekend")
+
+# Split steps by date, interval
+splitStepsByDate <- split(A$steps, as.factor(A$date))
+splitStepsByInterval <- split(A$steps, as.factor(A$interval))
+length(splitStepsByDate)
+length(splitStepsByInterval)
+
+# Aggregate by date, interval.
+StepsByDate <- sapply(splitStepsByDate, sum, na.rm=T)
+meanStepsByDate <- sapply(splitStepsByDate, mean, na.rm=T)
+medianStepsByDate <- sapply(splitStepsByDate, median, na.rm=T)
+StepsByInterval <- sapply(splitStepsByInterval, sum, na.rm=T)
+meanStepsByInterval <- sapply(splitStepsByInterval, mean, na.rm=T)
+medianStepsByInterval <- sapply(splitStepsByInterval, median, na.rm=T)
+
+# Histogram of steps per day.
+hist(StepsByDate)
+
+# Report mean, median by day
+print("Date, Mean steps, Median steps...", quote=F)
+for (i in 1 : length(StepsByDate)) {
+  print(sprintf("%s  mean %4.1f  median %4.1f", names(StepsByDate[i]), meanStepsByDate[i], medianStepsByDate[i]), quote=F)
+}
+
+# Plot steps by interval.
+plot(meanStepsByInterval, type="l", ylab="Average Steps", main="Average Steps Per 5-minute Interval")
+
+# Which interval has max steps?
+maxI = 1
+maxMean = meanStepsByInterval[[1]]
+for (i in 2 : length(meanStepsByInterval)) {
+  if (meanStepsByInterval[[i]] > maxMean) {
+    maxI <- i
+    maxMean <- meanStepsByInterval[[i]]
+  }
+}
+print(sprintf("Interval %d has maximum average steps (%.1f)", maxI, maxMean), quote=F)
+
+# Impute missing steps from 5-minute medians.
+nI = 0
+nZimpute <- 0
+nNZimpute <- 0
+for (i in 1 : ns) {
+  if (A$naSteps[i]) {
+    nI <- nI + 1
+    for (j in 1 : length(medianStepsByInterval)) {
+      k <- as.integer(names(medianStepsByInterval[j]))
+      m <- medianStepsByInterval[j]
+        if (A$interval[i] == k) {
+          if (m == 0) {
+            nZimpute <- nZimpute + 1
+          } else {
+            nNZimpute <- nNZimpute + 1
+          }
+        A$impSteps <- m
+        break
+      }
+    }
+    A$impSteps[i] <- A$impSteps[i]
+  } else {
+    A$impSteps[i] <- A$steps[i]
+  }
+}
+#nI
+#nZimpute
+#nNZimpute
+#nI == sum(is.na(A$steps))
+
+# Copy imputed steps into steps.
+A$steps <- A$impSteps
+#sum(is.na(A$steps))
+
+# Redo aggregation by date, interval.
+StepsByDate <- sapply(splitStepsByDate, sum, na.rm=T)
+meanStepsByDate <- sapply(splitStepsByDate, mean, na.rm=T)
+medianStepsByDate <- sapply(splitStepsByDate, median, na.rm=T)
+StepsByInterval <- sapply(splitStepsByInterval, sum, na.rm=T)
+meanStepsByInterval <- sapply(splitStepsByInterval, mean, na.rm=T)
+medianStepsByInterval <- sapply(splitStepsByInterval, median, na.rm=T)
+
+# Redo histogram of steps per day.
+hist(StepsByDate)
+
+# Redo report mean, median by day
+print("Date, Mean steps, Median steps...", quote=F)
+for (i in 1 : length(StepsByDate)) {
+  print(sprintf("%s  mean %4.1f  median %4.1f", names(StepsByDate[i]), meanStepsByDate[i], medianStepsByDate[i]), quote=F)
+}
+
+Amon <- A[(A$DOW == 'Mon'), ]
+Atue <- A[(A$DOW == 'Tue'), ]
+Awed <- A[(A$DOW == 'Wed'), ]
+Athu <- A[(A$DOW/ == 'Thu'), ]
+Afri <- A[(A$DOW == 'Fri'), ]
+Asat <- A[(A$DOW == 'Sat'), ]
+Asun <- A[(A$DOW == 'Sun'), ]
+
+nAmon <- nrow(Amon)
+nAtue <- nrow(Atue)
+nAwed <- nrow(Awed)
+nAthu <- nrow(Athu)
+nAfri <- nrow(Afri)
+nAsat <- nrow(Asat)
+nAsun <- nrow(Asun)
+print(sprintf("DOW's: mon %d, tue %d, wed %d, thu %d, fri %d, sat %d, sun %d", nAmon, nAtue, nAwed, nAthu, nAfri, nAsat, nAsun), quote=F)
+
+nAmonNA <- sum(is.na(Amon$steps))
+nAtueNA <- sum(is.na(Atue$steps))
+nAwedNA <- sum(is.na(Awed$steps))
+nAthuNA <- sum(is.na(Athu$steps))
+nAfriNA <- sum(is.na(Afri$steps))
+nAsatNA <- sum(is.na(Asat$steps))
+nAsunNA <- sum(is.na(Asun$steps))
+print(sprintf("DOW NA: mon %d, tue %d, wed %d, thu %d, fri %d, sat %d, sun %d", nAmonNA, nAtueNA, nAwedNA, nAthuNA, nAfriNA, nAsatNA, nAsunNA), quote=F)
+
+nAmonZ <- sum(Amon$steps == 0, na.rm=T)
+nAtueZ <- sum(Atue$steps == 0, na.rm=T)
+nAwedZ <- sum(Awed$steps == 0, na.rm=T)
+nAthuZ <- sum(Athu$steps == 0, na.rm=T)
+nAfriZ <- sum(Afri$steps == 0, na.rm=T)
+nAsatZ <- sum(Asat$steps == 0, na.rm=T)
+nAsunZ <- sum(Asun$steps == 0, na.rm=T)
+print(sprintf("DOW zero: mon %d, tue %d, wed %d, thu %d, fri %d, sat %d, sun %d", nAmonZ, nAtueZ, nAwedZ, nAthuZ, nAfriZ, nAsatZ, nAsunZ), quote=F)
+
+nAmonNz <- sum(Amon$steps > 0, na.rm=T)
+nAtueNz <- sum(Atue$steps > 0, na.rm=T)
+nAwedNz <- sum(Awed$steps > 0, na.rm=T)
+nAthuNz <- sum(Athu$steps > 0, na.rm=T)
+nAfriNz <- sum(Afri$steps > 0, na.rm=T)
+nAsatNz <- sum(Asat$steps > 0, na.rm=T)
+nAsunNz <- sum(Asun$steps > 0, na.rm=T)
+print(sprintf("DOW nonzero: mon %d, tue %d, wed %d, thu %d, fri %d, sat %d, sun %d", nAmonNz, nAtueNz, nAwedNz, nAthuNz, nAfriNz, nAsatNz, nAsunNz), quote=F)
+
+nAmonNA == nAmon - nAmonNz - nAmonZ
+nAtueNA == nAtue - nAtueNz - nAtueZ
+nAwedNA == nAwed - nAwedNz - nAwedZ
+nAthuNA == nAthu - nAthuNz - nAthuZ
+nAfriNA == nAfri - nAfriNz - nAfriZ
+nAsatNA == nAsat - nAsatNz - nAsatZ
+nAsunNA == nAsun - nAsunNz - nAsunZ
+
+medianAmon <- median(Amon$steps, na.rm=T)
+medianAtue <- median(Atue$steps, na.rm=T)
+medianAwed <- median(Awed$steps, na.rm=T)
+medianAthu <- median(Athu$steps, na.rm=T)
+medianAfri <- median(Afri$steps, na.rm=T)
+medianAsat <- median(Asat$steps, na.rm=T)
+medianAsun <- median(Asun$steps, na.rm=T)
+print(sprintf("DOW medians: mon %.1f, tue %.1f, wed %.1f, thu %.1f, fri %.1f, sat %.1f, sun %d", medianAmon, medianAtue, medianAwed, medianAthu, medianAfri, medianAsat, medianAsun), quote=F)
+
+meanAmon <- mean(Amon$steps, na.rm=T)
+meanAtue <- mean(Atue$steps, na.rm=T)
+meanAwed <- mean(Awed$steps, na.rm=T)
+meanAthu <- mean(Athu$steps, na.rm=T)
+meanAfri <- mean(Afri$steps, na.rm=T)
+meanAsat <- mean(Asat$steps, na.rm=T)
+meanAsun <- mean(Asun$steps, na.rm=T)
+
+# Group by DOW, interval and find median, mean.
+
+sum(is.na(A$steps))
+
+A$naSteps <- is.na(A$steps)
+sum(A$naSteps)
+
+head(A)
+tail(A)
+A[123:456, ]
+
+Ana <- A[(A$naSteps), ]
+head(Ana)
+tail(Ana)
+
+nnaMon <- nrow(Ana[(Ana$DOW == 'Monday'), ])
+nnaTue <- nrow(Ana[(Ana$DOW == 'Tuesday'), ])
+nnaWed <- nrow(Ana[(Ana$DOW == 'Wednesday'), ])
+nnaThu <- nrow(Ana[(Ana$DOW == 'Thursday'), ])
+nnaFri <- nrow(Ana[(Ana$DOW == 'Friday'), ])
+nnaSat <- nrow(Ana[(Ana$DOW == 'Saturday'), ])
+nnaSun <- nrow(Ana[(Ana$DOW == 'Sunday'), ])
+
+nnaAll <- nnaMon+nnaTue+nnaWed+nnaThu+nnaFri+nnaSat+nnaSun
+nnaAll == nrow(Ana)
+
+write.csv(Ana, 'Ana.csv')
+
+# Count NA's by date.  Non-NA's too.
+
+splitDates <- split(A, as.factor(A$date))
+
+splitIntervals <- split(A, as.factor(A$interval))
+
+

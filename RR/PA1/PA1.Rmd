@@ -1,0 +1,184 @@
+Reproducibe Research Progamming Assignment 1
+========================================================
+
+### Read raw data.
+```{r}
+A <- read.csv('activity.csv', as.is=T)
+head(A)
+tail(A)
+fieldnames <- names(A)
+print("field names...", quote=F)
+print(fieldnames)
+```
+
+### Seconds per day, days, expected number of samples, sample count check.
+```{r}
+spd <- 24 * 60 / 5
+days = 31 + 30
+sbSamples <- spd * days
+ns <- nrow(A)
+print(sprintf("got (%d) == expected (%d) samples: %s", ns, sbSamples, ns == sbSamples), quote=F)
+```
+
+### Sorted?
+```{r}
+z <- A[order(A$date, A$interval), ]
+print("data are sorted by date, interval...", quote=F)
+ns == sum(z$date == A$date)
+ns == sum(z$interval == A$interval)
+rm(z)
+```
+
+### Field types.
+```{r}
+class(A$steps)
+class(A$date)
+class(A$interval)
+```
+
+### NA, Zero, NonZero counts (by interval).
+```{r}
+nAna <- sum(is.na(A$steps))
+nAz <- sum(A$steps == 0, na.rm=T)
+nAnz <- sum(A$steps != 0, na.rm=T)
+print(sprintf("A$steps NA: %d, zero: %d, nonzero: %d", nAna, nAz, nAnz), quote=F)
+```
+
+### Save the raw steps value in another field.
+```{r}
+A$rawSteps <- A$steps
+```
+
+### Add a field indicating that steps is NA.
+```{r}
+A$naSteps <- is.na(A$steps)
+
+## Add an empty field for imputed steps.
+```{r}
+A$impSteps <- NA
+```
+
+### Add a day-of-week field.
+```{r}
+A$DOW <- weekdays(strptime(A$date, format='%Y-%m-%d'), abbreviate=T)
+A$facDOW <- factor(A$DOW, levels=c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), ordered=T)
+```
+
+### Add a weekday/weekend factor.
+```{r}
+A$wdwe <- factor(A$facDOW >= "Sat" & A$facDOW <= "Sun", labels=c("weekday", "weekend"))
+sum(A$wdwe == "weekday")
+sum(A$wdwe == "weekend")
+```
+
+### Split steps by date, interval
+```{r}
+splitStepsByDate <- split(A$steps, as.factor(A$date))
+splitStepsByInterval <- split(A$steps, as.factor(A$interval))
+length(splitStepsByDate)
+length(splitStepsByInterval)
+```
+
+### Aggregate by date, interval.
+```{r}
+StepsByDate <- sapply(splitStepsByDate, sum, na.rm=T)
+meanStepsByDate <- sapply(splitStepsByDate, mean, na.rm=T)
+medianStepsByDate <- sapply(splitStepsByDate, median, na.rm=T)
+StepsByInterval <- sapply(splitStepsByInterval, sum, na.rm=T)
+meanStepsByInterval <- sapply(splitStepsByInterval, mean, na.rm=T)
+medianStepsByInterval <- sapply(splitStepsByInterval, median, na.rm=T)
+```
+
+### Histogram of steps per day.
+```{r}
+hist(StepsByDate)
+
+### Report mean, median by day
+```{r}
+print("Date, Mean steps, Median steps...", quote=F)
+for (i in 1 : length(StepsByDate)) {
+  print(sprintf("%s  mean %4.1f  median %4.1f", names(StepsByDate[i]), meanStepsByDate[i], medianStepsByDate[i]), quote=F)
+}
+```
+
+### Plot steps by interval.
+```{r}
+plot(meanStepsByInterval, type="l", ylab="Average Steps", main="Average Steps Per 5-minute Interval")
+```
+
+### Which interval has max steps?
+```{r}
+maxI = 1
+maxMean = meanStepsByInterval[[1]]
+for (i in 2 : length(meanStepsByInterval)) {
+  if (meanStepsByInterval[[i]] > maxMean) {
+    maxI <- i
+    maxMean <- meanStepsByInterval[[i]]
+  }
+}
+print(sprintf("Interval %d has maximum average steps (%.1f)", maxI, maxMean), quote=F)
+```
+
+### Impute missing steps from 5-minute medians.
+```{r}
+nI = 0
+nZimpute <- 0
+nNZimpute <- 0
+for (i in 1 : ns) {
+  if (A$naSteps[i]) {
+    nI <- nI + 1
+    for (j in 1 : length(medianStepsByInterval)) {
+      k <- as.integer(names(medianStepsByInterval[j]))
+      m <- medianStepsByInterval[j]
+        if (A$interval[i] == k) {
+          if (m == 0) {
+            nZimpute <- nZimpute + 1
+          } else {
+            nNZimpute <- nNZimpute + 1
+          }
+        A$impSteps <- m
+        break
+      }
+    }
+    A$impSteps[i] <- A$impSteps[i]
+  } else {
+    A$impSteps[i] <- A$steps[i]
+  }
+}
+nI
+nZimpute
+nNZimpute
+nI == sum(is.na(A$steps))
+```
+
+### Copy imputed steps into steps.
+```{r}
+A$steps <- A$impSteps
+ns == sum(is.na(A$steps))
+```
+
+### Redo aggregation by date, interval.
+```{r}
+StepsByDate <- sapply(splitStepsByDate, sum, na.rm=T)
+meanStepsByDate <- sapply(splitStepsByDate, mean, na.rm=T)
+medianStepsByDate <- sapply(splitStepsByDate, median, na.rm=T)
+StepsByInterval <- sapply(splitStepsByInterval, sum, na.rm=T)
+meanStepsByInterval <- sapply(splitStepsByInterval, mean, na.rm=T)
+medianStepsByInterval <- sapply(splitStepsByInterval, median, na.rm=T)
+```
+
+### Redo histogram of steps per day.
+```{r}
+hist(StepsByDate)
+```
+
+### Redo report mean, median by day
+```{r}
+print("Date, Mean steps, Median steps...", quote=F)
+for (i in 1 : length(StepsByDate)) {
+  print(sprintf("%s  mean %4.1f  median %4.1f", names(StepsByDate[i]), meanStepsByDate[i], medianStepsByDate[i]), quote=F)
+}
+```
+
+## End.
+
